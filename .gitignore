@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+.env
+storage/
+etl_logs/
+*.xlsx
+.venv/
+.pytest_cache/

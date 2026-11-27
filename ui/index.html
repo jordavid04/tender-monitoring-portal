@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pregões e Atas — demonstração</title>
+<style>html,body{margin:0;background:#120c1c}</style></head>
+<body>
+<!-- Mesma arquitetura do remote real: hospedeiro com shadow DOM aberto -->
+<div class="licitacoes-hospedeiro"></div>
+<script type="module">
+import { montarAbas, ico } from './pregoes-atas.js';
+import { criarApi } from './api-client.js';
+import { criarMock } from './mock-api.js';
+
+const host = document.querySelector('.licitacoes-hospedeiro');
+const sr = host.attachShadow({ mode: 'open' });
+const css = await (await fetch('./demo-theme.css')).text();
+const LOGO = '';
+const params = new URLSearchParams(location.search);
+
+// 1) tenta a API real (docker compose / uvicorn); 2) se não houver, cai no modo demonstração (dados no navegador)
+const papel = params.get('papel') || 'admin';
+let api = criarApi({ headers: () => ({ 'X-User': 'Dev Demo', 'X-Role': papel }) }), sessao, demo = false;
+try {
+  const r = await fetch('/api/v1/sessao', { headers: { 'X-User': 'Dev Demo', 'X-Role': papel } });
+  if (!r.ok || !(r.headers.get('content-type') || '').includes('json')) throw 0;
+  sessao = await r.json();
+} catch {
+  demo = true; api = criarMock();
+  sessao = { nome: 'Usuário demonstração', papelRotulo: papel === 'consulta' ? 'Consulta' : 'Administração', podeEditar: papel !== 'consulta', podeAdministrar: papel === 'admin' };
+}
+const iniciais = (sessao.nome || '?').split(/\s+/).filter(Boolean).slice(0, 2).map(s => s[0]).join('').toUpperCase();
+const inerte = ['Painel', 'Pedidos', 'Novo pedido', 'Entregas'];
+sr.innerHTML = `<style>${css}</style><div class="licitacoes-raiz"><div class="telas-da-sessao"><div class="shell no-portal">
+ <button class="abrir-menu" aria-label="Abrir menu">☰</button>
+ <aside class="menu"><div class="menu-marca">${LOGO ? `<img src="${LOGO}" alt="Logo">` : ''}<div class="produto">Portal Licitações</div></div>
+  <nav>${inerte.map(n => `<a role="link" tabindex="0" title="Tela do portal existente (fora desta demonstração)"><span>${n}</span></a>`).join('')}
+   <div class="menu-grupo">Pregões e Atas</div>
+   <a role="link" tabindex="0" data-aba="pregoes">${ico('gavel')}<span>Pregões</span></a>
+   <a role="link" tabindex="0" data-aba="atas">${ico('scroll')}<span>Atas e Contratos</span></a></nav>
+  <div class="menu-tema"><button aria-pressed="false" data-t="claro">Claro</button><button aria-pressed="true" data-t="escuro">Escuro</button></div>
+  <div class="menu-rodape"><div class="avatar">${iniciais}</div><div class="quem"><b>${sessao.nome}</b><span>${sessao.papelRotulo}</span></div></div></aside>
+ <div class="menu-fundo"></div><main class="conteudo">${demo ? '<div class="note" id="aviso-demo" style="margin-bottom:16px"><b>Modo demonstração.</b> Sem API conectada: os dados ficam só neste navegador e a planilha sai em CSV. Para usar a API real: <code>docker compose up --build</code> e abra <code>http://localhost:8080</code>. <button class="ghost pequeno" id="zerar" style="margin-left:8px">Apagar dados da demonstração</button></div>' : ''}<div id="aba"></div></main></div></div></div>`;
+const raiz = sr.querySelector('.licitacoes-raiz'), area = sr.querySelector('#aba');
+const abas = montarAbas({ main: area, api, sessao });
+const ativa = a => { sr.querySelectorAll('[data-aba]').forEach(l => l.classList.toggle('ativo', l.dataset.aba === a)); abas.abrir(a); sr.querySelector('.menu').classList.remove('aberto'); };
+sr.querySelectorAll('[data-aba]').forEach(l => { l.onclick = () => ativa(l.dataset.aba); l.onkeydown = e => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), ativa(l.dataset.aba)); });
+sr.querySelectorAll('[data-t]').forEach(b => b.onclick = () => { b.dataset.t === 'claro' ? raiz.setAttribute('data-tema', 'claro') : raiz.removeAttribute('data-tema'); sr.querySelectorAll('[data-t]').forEach(x => x.setAttribute('aria-pressed', x === b)); });
+sr.querySelector('.abrir-menu').onclick = () => sr.querySelector('.menu').classList.toggle('aberto');
+const z = sr.querySelector('#zerar'); if (z) z.onclick = () => { if (confirm('Apagar todos os dados da demonstração deste navegador?')) { api.zerar(); ativa(sr.querySelector('.menu a.ativo')?.dataset.aba || 'pregoes'); } };
+window.__abas = abas; window.__api = api;
+ativa(params.get('aba') || 'pregoes');
+</script></body></html>

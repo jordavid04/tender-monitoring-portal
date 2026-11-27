@@ -1,0 +1,23 @@
+# Ambiente de DEV/STAGING (NÃO usar em produção). Sobe Postgres 16 já com as migrações 001-004 e a API.
+services:
+  db:
+    image: postgres:16
+    environment: { POSTGRES_PASSWORD: dev, POSTGRES_DB: licitacoes }
+    volumes:
+      - ./db/migrations/001_base_licitacoes.sql:/docker-entrypoint-initdb.d/01.sql:ro
+      - ./db/migrations/002_pregoes_atas.sql:/docker-entrypoint-initdb.d/02.sql:ro
+      - ./db/migrations/003_views_pregoes_atas.sql:/docker-entrypoint-initdb.d/03.sql:ro
+      - ./db/migrations/004_vinculo_portal_licitacoes.sql:/docker-entrypoint-initdb.d/04.sql:ro
+    ports: ["5432:5432"]
+  api:
+    build: .
+    environment:
+      DATABASE_URL: postgresql+psycopg2://postgres:dev@db:5432/licitacoes
+      AUTH_MODE: header
+      MAIL_BACKEND: console
+      STORAGE_DIR: /srv/storage
+      DEV_UI: "1"          # serve a interface (../ui) em http://localhost:8080
+      UI_DIR: /srv/ui
+    depends_on: [db]
+    ports: ["8080:8000"]      # 8080 (a 8000 costuma estar bloqueada no Windows)
+    volumes: ["./storage:/srv/storage", "./ui:/srv/ui:ro"]
